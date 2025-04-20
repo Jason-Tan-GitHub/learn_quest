@@ -312,25 +312,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['signupBtn'])) {
         </div>
       </div>
     </section3>
-    <section4 id="aboutUs">
-      <div class="meet">
-        <h1>Meet our team</h1>
-      </div>
-      <div class="teamContainer">
-        <a href="chiho_portfolio.html" target="_blank" class="teamBox">
-          <img src="image/tanchiho.svg" alt="">
-          <h1>Tan Chi Ho</h1>
-        </a>
-        <a href="kangsheng_portfolio.html" target="_blank" class="teamBox">
-          <img src="image/lohkangsheng.svg" alt="">
-          <h1>Loh Kang Sheng</h1>
-        </a>
-        <a href="ethan_portfolio.html" target="_blank" class="teamBox">
-          <img src="image/ethanoey.svg" alt="">
-          <h1>Ethan Oey Jen-Zen</h1>
-        </a>
-      </div>
-    </section4>
     <footer>
       <div class="containerFooter">
         <div class="containerFoot1">
