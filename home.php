@@ -30,26 +30,12 @@ if (isset($_SESSION['id'])) {
   exit;
 }
 
-//Retrieve quiz id from the form, and also check if the quiz is already completed
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['quiz_id'])) {
   $quizId = intval($_POST['quiz_id']);
-
-  $stmt = $conn->prepare("SELECT * FROM history WHERE id = ? AND quiz_id = ?");
-  $stmt->bind_param("ii", $sessionId, $quizId);
-  $stmt->execute();
-  $historyResult = $stmt->get_result();
-  $quizCompleted = $historyResult->num_rows > 0;
-  $stmt->close();
-
-  if ($quizCompleted) {
-    echo json_encode(['status' => 'error', 'message' => 'You have already completed this quiz.']);
-    exit; // Stop further processing
-  }
-
-  echo json_encode(['status' => 'success', 'message' => 'Starting the quiz.']);
+  // Process the ID or redirect to another page
+  header("Location: quiz.php?id=$quizId");
   exit;
 }
-
 
 
 $id = $user["id"];
@@ -57,8 +43,6 @@ $name = $user["username"];
 $quizListStmt = $conn->prepare("SELECT quiz_id, quiz_name, category FROM quiz");
 $quizListStmt->execute();
 $quizListResult = $quizListStmt->get_result();
-
-mysqli_close($conn);
 ?>
 
 <!DOCTYPE html>
@@ -101,7 +85,7 @@ mysqli_close($conn);
             <h1>HTML & CSS</h1>
             <?php foreach ($allQuiz as $row): ?>
               <?php if (strtolower($row['category']) === 'html' || strtolower($row['category']) === 'css'): ?>
-                <a onclick="submitQuizId(<?= $row['quiz_id'] ?>)"><?= htmlspecialchars($row['quiz_name']) ?></a>
+                <a href="#" onclick="submitQuizId(<?= $row['quiz_id'] ?>)"><?= htmlspecialchars($row['quiz_name']) ?></a>
               <?php endif; ?>
             <?php endforeach; ?>
           </div>
@@ -111,7 +95,7 @@ mysqli_close($conn);
             <h1>Java</h1>
             <?php foreach ($allQuiz as $row): ?>
               <?php if (strtolower($row['category']) === 'java'): ?>
-                <a onclick="submitQuizId(<?= $row['quiz_id'] ?>)"><?= htmlspecialchars($row['quiz_name']) ?></a>
+                <a href="#" onclick="submitQuizId(<?= $row['quiz_id'] ?>)"><?= htmlspecialchars($row['quiz_name']) ?></a>
               <?php endif; ?>
             <?php endforeach; ?>
           </div>
@@ -121,7 +105,7 @@ mysqli_close($conn);
             <h1>Python</h1>
             <?php foreach ($allQuiz as $row): ?>
               <?php if (strtolower($row['category']) === 'python'): ?>
-                <a onclick="submitQuizId(<?= $row['quiz_id'] ?>)"><?= htmlspecialchars($row['quiz_name']) ?></a>
+                <a href="#" onclick="submitQuizId(<?= $row['quiz_id'] ?>)"><?= htmlspecialchars($row['quiz_name']) ?></a>
               <?php endif; ?>
             <?php endforeach; ?>
           </div>
@@ -131,7 +115,7 @@ mysqli_close($conn);
             <h1>JavaScript</h1>
             <?php foreach ($allQuiz as $row): ?>
               <?php if (strtolower($row['category']) === 'javascript'): ?>
-                <a onclick="submitQuizId(<?= $row['quiz_id'] ?>)"><?= htmlspecialchars($row['quiz_name']) ?></a>
+                <a href="#" onclick="submitQuizId(<?= $row['quiz_id'] ?>)"><?= htmlspecialchars($row['quiz_name']) ?></a>
               <?php endif; ?>
             <?php endforeach; ?>
           </div>
@@ -141,7 +125,7 @@ mysqli_close($conn);
             <h1>PHP & SQL</h1>
             <?php foreach ($allQuiz as $row): ?>
               <?php if (strtolower($row['category']) === 'php' || strtolower($row['category']) === 'sql'): ?>
-                <a onclick="submitQuizId(<?= $row['quiz_id'] ?>)"><?= htmlspecialchars($row['quiz_name']) ?></a>
+                <a href="#" onclick="submitQuizId(<?= $row['quiz_id'] ?>)"><?= htmlspecialchars($row['quiz_name']) ?></a>
               <?php endif; ?>
             <?php endforeach; ?>
           </div>
@@ -157,32 +141,6 @@ mysqli_close($conn);
     function submitQuizId(quizId) {
       document.getElementById('quiz_id').value = quizId;
       document.getElementById('quizForm').submit();
-    }
-
-    function submitQuizId(quizId) {
-      const data = new URLSearchParams();
-      data.append('quiz_id', quizId);
-
-      fetch('', { // Use the current PHP page to handle the request
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: data.toString(),
-        })
-        .then(response => response.json())
-        .then(result => {
-          if (result.status === 'error') {
-            alert(result.message); // Show the error message if the quiz is already completed
-          } else if (result.status === 'success') {
-            alert(result.message); // Show the success message if quiz can be started
-            window.location.href = `quiz.php?id=${quizId}`; // Redirect to the quiz page
-          }
-        })
-        .catch(error => {
-          console.error('Error:', error);
-          alert('An error occurred while processing your request.');
-        });
     }
 
     //Handle quiz boxes in home page for user

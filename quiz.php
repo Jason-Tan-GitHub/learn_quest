@@ -28,9 +28,26 @@ if (isset($_SESSION['id'])) {
     exit;
 }
 
-
+// Retrieve the quiz_id from the URL query string
 if (isset($_GET['id'])) {
     $quizId = intval($_GET['id']);
+
+    // Check if the user has already completed the quiz
+    $stmt = $conn->prepare("SELECT * FROM history WHERE id = ? AND quiz_id = ?");
+    $stmt->bind_param("ii", $sessionId, $quizId);
+    $stmt->execute();
+    $historyResult = $stmt->get_result();
+    $quizCompleted = $historyResult->num_rows > 0; // Check if a record exists
+    $stmt->close();
+
+    if ($quizCompleted) {
+        // If the quiz has been completed, alert the user and prevent quiz access
+        echo "<script>
+            alert('You have already completed this quiz.');
+            window.location.href = 'home.php';
+        </script>";
+        exit; // Stop further execution of the script
+    }
 
     // Fetch quiz details
     $stmt = $conn->prepare("SELECT * FROM quiz WHERE quiz_id = ?");
@@ -85,7 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $stmtFetchTotalPoints->bind_param("i", $userId);
     $stmtFetchTotalPoints->execute();
     $resultTotalPoints = $stmtFetchTotalPoints->get_result();
-
+    
     $currentPoints = 0;
 
     if ($row = $result->fetch_assoc()) {
@@ -119,8 +136,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $stmt->close();
     exit;
 }
-
-mysqli_close($conn);
 ?>
 
 <!DOCTYPE html>
@@ -146,6 +161,17 @@ mysqli_close($conn);
                     <p><?= htmlspecialchars($quiz['description']) ?></p>
                 </div>
                 <button onclick="startQuiz()" class="btn-action-quiz-button action-quiz-button action-quiz-buttons">Start Quiz</button>
+                <script>
+                    function startQuiz() {
+                        const QD = document.querySelector(".quiz-description");
+                        const QC = document.querySelector(".quiz-container");
+                        const btn = document.querySelector(".btn-action-quiz-button");
+
+                        QD.classList.toggle("active");
+                        QC.classList.toggle("active");
+                        btn.classList.toggle("active");
+                    }
+                </script>
                 <div class="quiz-container">
                     <!-- $index is a temporary variable that indicates the current question's position in the $questions array, starting from 0 -->
                     <?php foreach ($questions as $index => $question): ?>
@@ -165,16 +191,6 @@ mysqli_close($conn);
         </div>
     </div>
     <script>
-        function startQuiz() {
-            const QD = document.querySelector(".quiz-description");
-            const QC = document.querySelector(".quiz-container");
-            const btn = document.querySelector(".btn-action-quiz-button");
-
-            QD.classList.toggle("active");
-            QC.classList.toggle("active");
-            btn.classList.toggle("active");
-        }
-
         let currentQuestion = 0;
         const totalQuestions = <?= count($questions) ?>;
         const correctAnswers = <?= json_encode(array_column($questions, 'correct_answer')) ?>;
@@ -230,7 +246,6 @@ mysqli_close($conn);
             data.append('score', score);
             data.append('quiz_id', quizId);
 
-            //Fetch json message from server
             fetch("", {
                     method: "POST",
                     headers: {

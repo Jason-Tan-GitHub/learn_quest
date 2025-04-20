@@ -12,7 +12,8 @@ if (isset($_SESSION['id'])) {
     $user = $result->fetch_assoc();
     $stmt->close();
 
-    // Assign user details to variables (with XSS protection)
+    // Assign user details to variables (with XSS protection), which is storing code into a database
+    // htmlspecialchars converts those commands to non executable words
     if ($user) {
         $id = htmlspecialchars($user["id"]);
         $name = htmlspecialchars($user["username"]);
@@ -33,7 +34,7 @@ $quizListStmt = $conn->prepare("SELECT quiz_id, quiz_name FROM quiz");
 $quizListStmt->execute();
 $quizListResult = $quizListStmt->get_result();
 
-// Delete
+//delete
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['delete_button_quizzes']) && isset($_POST['quiz_id'])) {
         $quizId = intval($_POST['quiz_id']); // Sanitize the input to prevent SQL injection
@@ -68,18 +69,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Commit the transaction
             $conn->commit();
-            echo json_encode(['status' => 'success', 'message' => 'Quiz and related records deleted successfully.']);
+
+            echo "<script>alert('Record deleted successfully'); window.location.href = 'admin_quiz.php';</script>";
         } catch (Exception $e) {
             // Rollback the transaction if any query fails
             $conn->rollback();
-            error_log("Error during deletion: " . $e->getMessage());
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+            echo "<script>alert('Error deleting record: " . addslashes($e->getMessage()) . "');</script>";
         }
-        exit;
     }
 }
 
-// Edit
+
+//edit
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['edit_details_button_quizzes']) && isset($_POST['quiz_id'])) {
         $quizId = intval($_POST['quiz_id']); // Sanitize the input to prevent SQL injection
@@ -87,8 +88,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 }
-
-mysqli_close($conn);
 ?>
 
 <!DOCTYPE html>
@@ -125,7 +124,7 @@ mysqli_close($conn);
                                         <td>
                                             <form action="" method="POST">
                                                 <input type="hidden" name="quiz_id" value="<?= htmlspecialchars($row['quiz_id']) ?>">
-                                                <button type="button" onclick="submitDeleteId(<?= $row['quiz_id'] ?>)" class="action-quiz-button action-quiz-buttons" style="<?php echo $show_admin_options ? ' ' : 'display:none;'; ?>">DELETE</button>
+                                                <button type="submit" class="action-quiz-button action-quiz-buttons" name="delete_button_quizzes" style="<?php echo $show_admin_options ? ' ' : 'display:none;'; ?>">DELETE</button>
                                                 <button type="submit" class="action-quiz-button action-quiz-buttons" name="edit_details_button_quizzes">EDIT</button>
                                             </form>
                                         </td>
@@ -138,44 +137,8 @@ mysqli_close($conn);
                 </div>
             </div>
         </div>
-        <form id="quizForm" action="" method="POST" style="display: none;">
-            <input type="hidden" name="quiz_id" id="quiz_id">
-        </form>
     </div>
 </body>
 <script src="functions.js"></script>
-<script>
-    function submitDeleteId(quizId) {
-        document.getElementById('quiz_id').value = quizId;
-        const data = new URLSearchParams();
-        data.append('quiz_id', quizId);
-        data.append('delete_button_quizzes', true);
-
-        fetch('', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: data.toString(),
-            })
-            .then(response => response.json())
-            .then(result => {
-                if (result.status === 'error') {
-                    alert(result.message);
-                } else if (result.status === 'success') {
-                    alert(result.message);
-                    // Remove the corresponding row
-                    const row = document.querySelector(`button[onclick="submitDeleteId(${quizId})"]`).closest('tr');
-                    if (row) {
-                        row.remove();
-                    }
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while processing your request.');
-            });
-    }
-</script>
 
 </html>

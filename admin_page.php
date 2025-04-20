@@ -31,6 +31,7 @@ $show_admin_save = false;
 $username_edit = '';
 $email_edit = '';
 $password_edit = '';
+
 // Handle Admin Signup Process
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admin_btn_signup'])) {
     if (
@@ -39,8 +40,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admin_btn_signup'])) 
         !empty($_POST['admin_password']) &&
         !empty($_POST['admin_confirm_password'])
     ) {
-        $username = htmlspecialchars($_POST['admin_username']);
-        $email = filter_var($_POST['admin_email'], FILTER_VALIDATE_EMAIL);
+        $username = htmlspecialchars(trim($_POST['admin_username']));
+        $email = filter_var(trim($_POST['admin_email']), FILTER_VALIDATE_EMAIL);
         $password = $_POST['admin_password'];
         $confirm_password = $_POST['admin_confirm_password'];
 
@@ -51,14 +52,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admin_btn_signup'])) 
             $error_message_signup = "Passwords do not match.";
             $signup_error = true;
         } else {
-            $emailCheckStmt = $conn->prepare("SELECT email FROM user WHERE email = ?");
-            $emailCheckStmt->bind_param("s", $email);
-            $emailCheckStmt->execute();
-            $emailCheckStmt->store_result();
+            // Check if username or email already exists
+            $checkStmt = $conn->prepare("SELECT id FROM user WHERE username = ? OR email = ?");
+            $checkStmt->bind_param("ss", $username, $email);
+            $checkStmt->execute();
+            $checkStmt->store_result();
 
-            if ($emailCheckStmt->num_rows > 0) {
-                $error_message_signup = "Email already exists. Please use a different email.";
-                $signup_error = true;
+            if ($checkStmt->num_rows > 0) {
+                $checkStmt->bind_result($existingId);
+                $checkStmt->fetch();
+
+                // Check which field is causing the conflict
+                $userCheckStmt = $conn->prepare("SELECT id FROM user WHERE username = ?");
+                $userCheckStmt->bind_param("s", $username);
+                $userCheckStmt->execute();
+                $userCheckStmt->store_result();
+
+                if ($userCheckStmt->num_rows > 0) {
+                    $error_message_signup = "Username already exists. Please choose a different username.";
+                    $signup_error = true;
+                } else {
+                    $error_message_signup = "Email already exists. Please use a different email.";
+                    $signup_error = true;
+                }
+
+                $userCheckStmt->close();
             } else {
                 // Hash the password and insert new admin
                 $hashed_password = password_hash($password, PASSWORD_BCRYPT);
@@ -75,13 +93,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['admin_btn_signup'])) 
                 }
                 $stmt->close();
             }
-            $emailCheckStmt->close();
+            $checkStmt->close();
         }
     } else {
         $error_message_signup = "Please fill in all required fields.";
         $signup_error = true;
     }
 }
+
 
 //delete
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -93,16 +112,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $deleteStmt->bind_param("i", $id);
 
         if ($deleteStmt->execute()) {
-            echo json_encode(['status' => 'success', 'message' => 'Record deleted successfully']);
+            echo "<script>alert('Record deleted successfully')</script>";
         } else {
-            echo json_encode(['status' => 'error', 'message' => 'Error deleting record: ' . $conn->error]);
+            echo "<script>alert('Error deleting record: ')</script>" . $conn->error;
         }
 
         $deleteStmt->close();
-        exit;
     }
 }
-
 
 //edit
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -135,7 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-//save edit
+// save edit
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['admin_btn_save']) && isset($_POST['id'])) {
         $id = intval($_POST['id']); // Sanitize the input to prevent SQL injection
@@ -145,33 +162,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $username = htmlspecialchars($_POST['admin_username']);
             $password = $_POST['admin_password'] ?? '';
 
-            if (!empty($password)) {
-                $hashed_password = password_hash($password, PASSWORD_BCRYPT);
+            // Check if the username already exists for another user
+            $usernameCheckStmt = $conn->prepare("SELECT id FROM user WHERE username = ? AND id != ?");
+            $usernameCheckStmt->bind_param("si", $username, $id);
+            $usernameCheckStmt->execute();
+            $usernameCheckStmt->store_result();
 
-                // Update full name and password
-                $sql = "UPDATE user SET username = ?, password = ? WHERE id = ?";
-                $stmt = $conn->prepare($sql);
-                $stmt->bind_param("ssi", $username, $hashed_password, $id);
+            if ($usernameCheckStmt->num_rows > 0) {
+                $error_message_signup = "Username already exists. Please choose a different username.";
+                $signup_error = true;
+                $usernameCheckStmt->close();
             } else {
-                // Update only full name (keep existing password)
-                $sql = "UPDATE user SET username = ? WHERE id = ?";
-                $stmt = $conn->prepare($sql);
-                $stmt->bind_param("si", $username, $id);
-            }
+                $usernameCheckStmt->close();
 
-            // Execute the query
-            if ($stmt->execute()) {
-                $signup_success = "User details updated successfully.";
-            } else {
-                $error_message_signup = "Error: Could not execute the query.";
-            }
+                if (!empty($password)) {
+                    $hashed_password = password_hash($password, PASSWORD_BCRYPT);
 
-            $stmt->close();
+                    // Update full name and password
+                    $sql = "UPDATE user SET username = ?, password = ? WHERE id = ?";
+                    $stmt = $conn->prepare($sql);
+                    $stmt->bind_param("ssi", $username, $hashed_password, $id);
+                } else {
+                    // Update only full name (keep existing password)
+                    $sql = "UPDATE user SET username = ? WHERE id = ?";
+                    $stmt = $conn->prepare($sql);
+                    $stmt->bind_param("si", $username, $id);
+                }
+
+                // Execute the query
+                if ($stmt->execute()) {
+                    $signup_success = "User details updated successfully.";
+                } else {
+                    $signup_error = "Error: Could not execute the query.";
+                }
+
+                $stmt->close();
+            }
         } else {
-            $error_message_signup = "Please fill in all required fields.";
+            $signup_error = "Please fill in all required fields.";
         }
     }
 }
+
 
 
 //cancel
@@ -191,8 +223,6 @@ $adminListStmt = $conn->prepare("SELECT id, username, email FROM user WHERE is_a
 $adminListStmt->bind_param("i", $_SESSION['id']);
 $adminListStmt->execute();
 $adminListResult = $adminListStmt->get_result();
-
-mysqli_close($conn);
 ?>
 
 
@@ -231,12 +261,12 @@ mysqli_close($conn);
                         <input type="password" name="admin_confirm_password" placeholder="CONFIRM PASSWORD" style="<?php echo $show_admin_save ? 'display:none;' : 'display:block;'; ?>">
                         <button type="submit" class="admin-btn" name="admin_btn_save" style="<?php echo $show_admin_save ? 'display:block;' : 'display:none;'; ?>">Save</button>
                         <button type="submit" class="admin-btn" name="admin_btn_cancel" style="<?php echo $show_admin_save ? 'display:block;' : 'display:none;'; ?>">Cancel</button>
-                        <button type="submit" class="admin-btn" name="admin_btn_signup" style="<?php echo $show_admin_save ? 'display:none;' : 'display:block;'; ?>">Signup Admin</button>
+                        <button type="submit" class="admin-btn" name="admin_btn_signup" style="<?php echo $show_admin_save ? 'display:none;' : 'display:block;'; ?>">Signup Teacher</button>
                     </form>
                 </div>
                 <!-- Right Side: Admin Table -->
                 <div class="admin-page-container-right">
-                    <h1 class="">Admin List</h1>
+                    <h1 class="">Teacher List</h1>
                     <div class="scrollable-table-admin">
                         <table class="table-admin">
                             <thead>
@@ -256,7 +286,7 @@ mysqli_close($conn);
                                         <td>
                                             <form action="" method="POST">
                                                 <input type="hidden" name="id" value="<?= htmlspecialchars($row['id']) ?>">
-                                                <button type="button" onclick="submitDeleteId(<?= $row['id'] ?>)" class="action-quiz-button action-quiz-buttons">DELETE</button>
+                                                <button type="submit" class="action-quiz-button action-quiz-buttons" name="delete-button">DELETE</button>
                                                 <button type="submit" class="action-quiz-button action-quiz-buttons" name="edit-details-button">EDIT</button>
                                             </form>
                                         </td>
@@ -268,47 +298,8 @@ mysqli_close($conn);
                 </div>
             </div>
         </div>
-        <form id="idForm" action="" method="POST" style="display: none;">
-            <input type="hidden" name="id" id="id">
-        </form>
     </div>
 </body>
 <script src="functions.js"></script>
-<script>
-    function submitDeleteId(id) {
-        document.getElementById('id').value = id;
-        document.getElementById('idForm').submit();
-        // Prepare the data to send in the request
-        const data = new URLSearchParams();
-        data.append('id', id);
-        data.append('delete-button', true);
-
-        // Make a POST request using fetch
-        fetch('', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: data.toString(),
-            })
-            .then(response => response.json())
-            .then(result => {
-                if (result.status === 'error') {
-                    alert(result.message); // Show the error message
-                } else if (result.status === 'success') {
-                    alert(result.message); // Show the success message
-                    // Remove the corresponding row
-                    const row = document.querySelector(`button[onclick="submitDeleteId(${id})"]`).closest('tr');
-                    if (row) {
-                        row.remove(); // Remove the row from the DOM
-                    }
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while processing your request.');
-            });
-    }
-</script>
 
 </html>

@@ -29,7 +29,7 @@ $image = "imageProfile/" . $user["profile_pic"];
         <a class="link" href="home.php" id="top_nav_home1">Home</a>
         <h3>|</h3>
         <div class="dropdown">
-            <img src="<?php echo $image; ?>" alt="Profile Picture" class="user-img">
+            <img src="<?php echo $image; ?>" alt="Profile Picture" class="user-img" alt="Profile Picture" />
             <div id="dropdownMenu">
                 <ul>
                     <li id="top_nav_manage_quiz2">

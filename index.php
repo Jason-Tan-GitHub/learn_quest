@@ -61,6 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['loginBtn'])) {
   }
 }
 
+//Handle Signup Process
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['signupBtn'])) {
   // Check required fields
   if (
@@ -189,7 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['signupBtn'])) {
       <i class='bx bx-menu bx-lg' onclick="openNav()"></i>
       <div id="mySidenav" class="sidenav">
         <i class='bx bx-x bx-lg' onclick="closeNav()"></i>
-        <img src="image/home.svg" alt="">
+        <img src="image/home.svg" alt="A House">
         <a href="#" class="b1">Home</a>
         <img src="image/subjects.svg" alt="A Coding Symbol">
         <a href="#" class="b1">Subjects</a>
@@ -211,7 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['signupBtn'])) {
         <?php endif; ?>
 
         <input type="email" placeholder="EMAIL" name="emailLogin" value="<?php echo isset($_POST['emailLogin']) ? htmlspecialchars($_POST['emailLogin'], ENT_QUOTES, 'UTF-8') : ''; ?>">
-        <input type="password" placeholder="PASSWORD" name="passwordLogin">
+        <input type="password" placeholder="PASSWORD" name="passwordLogin" id="myInputLog">
         <a href="reset-page.php"><span>Forgot Password?</span></a>
         <button type="submit" class="btn" name="loginBtn">Login</button>
         <a onclick="openSignupForm()">Don't have an account? <span>Sign up now!</span></a>
@@ -250,7 +251,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['signupBtn'])) {
         </form>
       </div>
       <div class="sec1Image">
-        <img class="Img1" src="gif/learn_quest_1.gif" alt="" />
+        <img class="Img1" src="gif/learn_quest_1.gif" alt="A GIF: Using computers" />
       </div>
     </section1>
     <!-- Section 2 container -->
@@ -264,7 +265,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['signupBtn'])) {
         </p>
       </div>
       <div class="sec2Header2">
-        <img src="gif/users.gif" alt="Picture of a computer">
+        <img src="gif/users.gif" alt="GIF of users" />
       </div>
     </section2>
     <!-- Section 3 container -->
@@ -307,7 +308,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['signupBtn'])) {
           </div>
         </div>
         <div class="sec3Placement2">
-          <img src="gif/learn_quest_2.gif" alt="">
+          <img src="gif/learn_quest_2.gif" alt="GIF of users using devices">
           <h1>Anytime... Anywhere...</h1>
         </div>
       </div>
@@ -315,7 +316,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['signupBtn'])) {
     <footer>
       <div class="containerFooter">
         <div class="containerFoot1">
-          <img src="image/learn_quest.svg" alt="">
+          <img src="image/learn_quest.svg" alt="Logo">
           <hr>
           <div class="flexFoot1">
             <i class="fa-regular fa-envelope"></i>

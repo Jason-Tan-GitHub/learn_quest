@@ -3,7 +3,6 @@ session_start();
 include('guard.php');
 include('connect.php');
 
-$show_admin_options = false;
 if (isset($_SESSION['id'])) {
     $sessionId = $_SESSION['id'];
     $stmt = $conn->prepare("SELECT * FROM user WHERE id = ?");
@@ -15,15 +14,12 @@ if (isset($_SESSION['id'])) {
 
     if ($user) {
         $id = htmlspecialchars($user["id"]);
-
-        if ($user['is_admin'] == 2) {
-            $show_admin_options = true;
-        }
     }
 } else {
     header("Location: index.php");
     exit;
 }
+
 
 // Handle submission of quiz form
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_form'])) {
@@ -39,8 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_form'])) {
         $stmt->close();
 
         if ($count > 0) {
-            echo json_encode(['status' => 'error', 'message' => 'Quiz name already exists. Please choose a different name.']);
-            exit;
+            echo "<script>alert('Quiz name already exists. Please choose a different name.');window.location.href = 'create_quiz.php';</script>";
+            return;
         }
 
         $stmt = $conn->prepare("INSERT INTO quiz (quiz_name, description, category) VALUES (?, ?, ?)");
@@ -57,8 +53,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_form'])) {
             $correctAnswer = $_POST["correct_answer_$q"] ?? '';
 
             if (empty($question) || empty($correctAnswer)) {
-                echo json_encode(['status' => 'error', 'message' => "Please fill in all question and correct answer fields for Question $q."]);
-                exit;
+                echo "<script>alert('Please fill in all question and correct answer fields for Question $q.');</script>";
+                return;
             }
 
             $stmt = $conn->prepare("INSERT INTO question (question_text, correct_answer, quiz_id) VALUES (?, ?, ?)");
@@ -71,8 +67,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_form'])) {
                 $option = $_POST["answer_{$q}_option_$o"] ?? '';
 
                 if (empty($option)) {
-                    echo json_encode(['status' => 'error', 'message' => "Please fill in all options for Question $q."]);
-                    exit;
+                    echo "<script>alert('Please fill in all options for Question $q.');</script>";
+                    return;
                 }
 
                 $stmt = $conn->prepare("INSERT INTO options (option_text, question_id) VALUES (?, ?)");
@@ -82,13 +78,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_form'])) {
             }
         }
 
-        echo json_encode(['status' => 'success', 'message' => 'Quiz and questions added successfully.']);
+        echo "<script>
+        alert('Quiz and questions added successfully.');
+        window.location.href = 'admin_quiz.php';
+        </script>";
         exit;
     } else {
-        echo json_encode(['status' => 'error', 'message' => 'Please fill in the quiz name, description, category, and number of questions.']);
-        exit;
+        echo "<script>alert('Please fill in the quiz name, description, category, and number of questions.');</script>";
     }
 }
+
+
 ?>
 
 <!DOCTYPE html>
@@ -107,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_form'])) {
 <body>
     <div class="admin-page">
         <div class="admin-padding2">
-            <form id="quizForm" class="quiz-create-container">
+            <form action="" method="POST" id="quizForm" class="quiz-create-container">
                 <!-- Left Side: Quiz Name and Description -->
                 <div class="quiz-left-side">
                     <input type="text" class="textBox1" name="quiz_name" placeholder="QUIZ NAME" required>
@@ -143,24 +143,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_form'])) {
                 <!-- Right Side: Questions and Options -->
                 <div class="quiz-right-side">
                     <div class="container-quiz-questions">
-
+                        <!-- Questions will be generated here -->
                     </div>
                 </div>
                 <div class="quiz-right-side-bottom">
                     <button type="button" class="action-quiz-button action-quiz-buttons" onclick="window.location.href='admin_quiz.php'">Back</button>
                     <button type="button" id="clearButton" class="action-quiz-button action-quiz-buttons">Clear</button>
-                    <button type="button" id="submitButton" class="action-quiz-button action-quiz-buttons">Submit</button>
+                    <button type="submit" name="submit_form" class="action-quiz-button action-quiz-buttons">Submit</button>
                 </div>
             </form>
         </div>
     </div>
-
     <script>
         document.getElementById('clearButton').addEventListener('click', function() {
             document.getElementById('quizForm').reset();
             generateQuestions(); // Regenerate questions after reset
         });
 
+        /* Add Questions */
         function generateQuestions() {
             const totalQuestions = document.getElementById("quantity").value;
             const containerQuiz = document.querySelector(".container-quiz-questions");
@@ -206,31 +206,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_form'])) {
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('quantity').addEventListener('input', generateQuestions);
             generateQuestions(); // Generate initial set of questions
-        });
-
-        //Can't retrieve a hidden value as it hasn't been created yet
-        document.getElementById('submitButton').addEventListener('click', function() {
-            const form = document.getElementById('quizForm');
-            const formData = new FormData(form);
-            formData.append('submit_form', true);
-
-            fetch('', {
-                method: 'POST',
-                body: formData
-            })
-                .then(response => response.json())
-                .then(result => {
-                    if (result.status === 'error') {
-                        alert(result.message);
-                    } else if (result.status === 'success') {
-                        alert(result.message);
-                        window.location.href = 'admin_quiz.php';
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('An error occurred while processing your request.');
-                });
         });
     </script>
 </body>

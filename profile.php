@@ -14,42 +14,99 @@ if (isset($_SESSION['id'])) {
     $user = $result->fetch_assoc();
     $stmt->close();
 
-    $stmtLeaderboard = $conn->prepare("SELECT username, is_admin, total_points FROM user ORDER BY total_points DESC");
+    $stmtLeaderboard = $conn->prepare("SELECT username, total_points FROM user ORDER BY total_points DESC");
     $stmtLeaderboard->execute();
     $resultLeaderboard = $stmtLeaderboard->get_result();
-    $userLeaderboard = $resultLeaderboard->fetch_all(MYSQLI_ASSOC);
+    $userLeaderboard = $resultLeaderboard->fetch_all(MYSQLI_ASSOC); // Fetch all rows as an associative array
     $stmtLeaderboard->close();
 
     if ($user) {
+        // Apply XSS protection
         $id = htmlspecialchars($user["id"], ENT_QUOTES, 'UTF-8');
         $name = htmlspecialchars($user["username"], ENT_QUOTES, 'UTF-8');
         $points = htmlspecialchars($user["total_points"], ENT_QUOTES, 'UTF-8');
         $email = htmlspecialchars($user["email"], ENT_QUOTES, 'UTF-8');
     } else {
+        // User does not exist
         header("Location: index.php");
         exit;
     }
 } else {
+    // User is not logged in
     header("Location: index.php");
     exit;
 }
 
 // Handle form submission to update user details
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_details_button'])) {
-    $newName = htmlspecialchars($_POST['name'], ENT_QUOTES, 'UTF-8');
-    $newEmail = htmlspecialchars($_POST['email'], ENT_QUOTES, 'UTF-8');
+    $newName = htmlspecialchars(trim($_POST['name']), ENT_QUOTES, 'UTF-8');
+    $newEmail = htmlspecialchars(trim($_POST['email']), ENT_QUOTES, 'UTF-8');
 
+    // Check if the new username or email already exists for another user
+    $stmtCheck = $conn->prepare("SELECT id FROM user WHERE username = ? OR email = ? AND id != ?");
+    $stmtCheck->bind_param("ssi", $newName, $newEmail, $sessionId);
+    $stmtCheck->execute();
+    $stmtCheck->store_result();
+
+    if ($stmtCheck->num_rows > 0) {
+        $stmtCheck->bind_result($existingId);
+        $stmtCheck->fetch();
+
+        // Check which field is causing the conflict
+        $userCheckStmt = $conn->prepare("SELECT id FROM user WHERE username = ? AND id != ?");
+        $userCheckStmt->bind_param("si", $newName, $sessionId);
+        $userCheckStmt->execute();
+        $userCheckStmt->store_result();
+
+        if ($userCheckStmt->num_rows > 0) {
+            // Conflict with username
+            $userCheckStmt->close();
+            echo "<script>
+                    alert('Username already exists. Please use a different username.');
+                    window.location.href = 'profile.php';
+                  </script>";
+            exit;
+        }
+        $userCheckStmt->close();
+
+        // Check if the email is causing the conflict
+        $emailCheckStmt = $conn->prepare("SELECT id FROM user WHERE email = ? AND id != ?");
+        $emailCheckStmt->bind_param("si", $newEmail, $sessionId);
+        $emailCheckStmt->execute();
+        $emailCheckStmt->store_result();
+
+        if ($emailCheckStmt->num_rows > 0) {
+            $emailCheckStmt->close();
+            echo "<script>
+                    alert('Email already exists. Please use a different email.');
+                    window.location.href = 'profile.php';
+                  </script>";
+            exit;
+        }
+        $emailCheckStmt->close();
+    }
+
+    $stmtCheck->close();
+
+    // Proceed with updating the user's details
     $stmt = $conn->prepare("UPDATE user SET username = ?, email = ? WHERE id = ?");
     $stmt->bind_param("ssi", $newName, $newEmail, $sessionId);
 
     if ($stmt->execute()) {
-        echo json_encode(['status' => 'success', 'message' => 'Details Updated Successfully']);
+        // Update successful, refresh the page to show updated details
+        echo "<script>
+                alert('Details Updated Successfully');
+                window.location.href = 'profile.php';
+              </script>";
+        exit;
     } else {
-        echo json_encode(['status' => 'error', 'message' => 'Failed to update details: ' . $stmt->error]);
+        $message = "Failed to update details: " . $stmt->error;
     }
+
     $stmt->close();
-    exit;
 }
+
+
 
 // Fetch quiz history
 $quizHistory = fetchQuizHistory($conn, $sessionId);
@@ -69,68 +126,35 @@ function fetchQuizHistory($conn, $userId)
     return $history;
 }
 
-// reset password
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $email = $_POST["email"];
-
-    // Validate the email
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        echo json_encode(['status' => 'error', 'message' => 'Invalid email address.']);
-        exit;
-    }
-
-    // Fetch user by email
-    $sql_user = "SELECT username FROM user WHERE email = ?";
-    $stmt_user = $conn->prepare($sql_user);
-    $stmt_user->bind_param("s", $email);
-    $stmt_user->execute();
-    $result = $stmt_user->get_result();
-    $user = $result->fetch_assoc();
-
-    // Check if user exists
-    if ($user) {
-        $name = $user['username'] ?? 'User'; // Default to "User" if username is missing
-
-        // Generate token and expiration time
-        $token = bin2hex(random_bytes(16)); // Generate a secure random token
-        $token_hash = hash("sha256", $token); // Hash the token for storage
-        $expiry = date("Y-m-d H:i:s", time() + 60 * 30); // 30-minute expiration
-
-        // Update the user's reset token and expiry
-        $sql = "UPDATE user SET reset_token_hash = ?, reset_token_expires_at = ? WHERE email = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("sss", $token_hash, $expiry, $email);
-
-        if ($stmt->execute() && $conn->affected_rows > 0) {
-            // Email the user with the reset link
-            $mail = include("mailer.php"); // Assume mailer.php returns a $mail object
-            $mail->setFrom("noreply@example.com", "Learn Quest");
-            $mail->addAddress($email);
-            $mail->Subject = "Password Reset";
-            $mail->Body = <<<END
-                <p>Hello, $name!</p>
-                <p>It seems that you have forgotten your password. Do not worry, we are here to help.</p>
-                <p>Click <a href="http://localhost/RWDD_Assignment_Website/reset-password.php?token=$token">here</a> to reset your password.</p>
-                END;
-
-            try {
-                if ($mail->send()) {
-                    echo json_encode(['status' => 'success', 'message' => 'Reset link sent, please check your inbox.']);
-                } else {
-                    error_log("Mailer Error: " . $mail->ErrorInfo);
-                    echo json_encode(['status' => 'error', 'message' => 'An error occurred while sending the email. Please try again later.']);
-                }
-            } catch (Exception $e) {
-                error_log("Mailer Exception: " . $e->getMessage());
-                echo json_encode(['status' => 'error', 'message' => 'An error occurred while sending the email. Please try again later.']);
-            }
-        } else {
-            echo json_encode(['status' => 'error', 'message' => 'Failed to update reset token.']);
-        }
+//Update Profile Pic
+if (isset($_FILES["image"]["name"])) {
+    $id = $_POST["id"];
+    $name = $_POST["name"];
+    $imageName = $_FILES["image"]["name"];
+    $imageSize = $_FILES["image"]["size"];
+    $tmpName = $_FILES["image"]["tmp_name"];
+    $validImageExtension = ['jpg', 'jpeg', 'png'];
+    $imageExtension = explode('.', $imageName);
+    $imageExtension = strtolower(end($imageExtension));
+    if (!in_array($imageExtension, $validImageExtension)) {
+        echo
+        "<script>
+      alert('Invalid image extension');
+      document.location.href = '../updateimageprofile';
+      </script>";
+    } elseif ($imageSize > 12000000) {
+        echo
+        "<script>
+      alert('Image size is too large');
+      document.location.href = '../updateimageprofile';
+      </script>";
     } else {
-        echo json_encode(['status' => 'error', 'message' => 'No user found with that email address.']);
+        $newImageName = $name . " - " . date("Y.m.d") . " - " . date("h.i.sa"); //generate new image name
+        $newImageName .= "." . $imageExtension;
+        $query = "UPDATE user SET profile_pic = '$newImageName' WHERE id = $id";
+        mysqli_query($conn, $query);
+        move_uploaded_file($tmpName, 'imageProfile/' . $newImageName);
     }
-    exit;
 }
 
 mysqli_close($conn);
@@ -157,11 +181,18 @@ mysqli_close($conn);
                 <div class="profileContainerProfile">
                     <form class="formProfilePic" id="formProfilePic" action="" enctype="multipart/form-data" method="post">
                         <div>
-                            <?php if ($user !== null) { ?>
-                                <img class="user-img-settings" src="imageProfile/<?= htmlspecialchars($user["profile_pic"]); ?>" alt="">
+                            <?php
+                            if ($user !== null) {
+                                $id = $user["id"];
+                                $name = $user["username"];
+                                $image = $user["profile_pic"];
+                            ?>
+                                <img class="user-img-settings" src="imageProfile/<?php echo $image; ?>" alt="Your Profile">
                                 <div class="round-settings">
                                     <i class='bx bxs-camera bx-md'></i>
-                                    <input type="file" name="image" id="image" accept=".jpg, .jpeg, .png">
+                                    <input type="hidden" name="id" value="<?php echo $id; ?>">
+                                    <input type="hidden" name="name" value="<?php echo $name; ?>">
+                                    <input type="file" name="image" id="image" accept=".jpg, .jpeg, .png" title="">
                                 </div>
                             <?php } else {
                                 header("Location: login_signup.php");
@@ -169,25 +200,31 @@ mysqli_close($conn);
                             } ?>
                         </div>
                     </form>
+                    <script>
+                        // profile changer
+                        document.getElementById("image").onchange = function() {
+                            document.getElementById('formProfilePic').submit();
+                        }
+                    </script>
                 </div>
                 <div class="profileContainer1">
                     <div class="container1profile">
-                        <form id="detailsForm" class="container1profile-left">
+                        <form action="" method="POST" class="container1profile-left">
                             <h5>Name:</h5>
-                            <input type="text" name="name" value="<?= $name; ?>">
+                            <input type="text" name="name" value="<?php echo htmlspecialchars($name); ?>">
                             <h5>Email:</h5>
-                            <input type="email" name="email" value="<?= $email; ?>">
+                            <input type="email" name="email" value="<?php echo htmlspecialchars($email); ?>">
                             <div class="container1profile-left-buttons">
-                                <button type="button" onclick="submitDetailsChange()" class="action-profile-button action-profile-buttons">Save Details</button>
+                                <input type="submit" value="Save Details" name="save_details_button" class="action-profile-button action-profile-buttons">
                             </div>
                         </form>
                         <div class="container1profile-right">
                             <div class="backgroundPoints">
-                                <h3>Points: <?= $points; ?></h3>
+                                <h3>Points: <?php echo $points ?></h3>
                             </div>
                             <form id="resetPasswordForm" method="POST" action="reset-page.php" class="resetForm">
-                                <input type="hidden" name="email" value="<?= $email; ?>">
-                                <button type="button" onclick="submitResetRequest()" class="action-profile-button action-profile-buttons">Reset Password</button>
+                                <input type="hidden" name="email" value="<?php echo htmlspecialchars($email); ?>">
+                                <button type="submit" class="action-profile-button action-profile-buttons">Reset Password</button>
                             </form>
                         </div>
                     </div>
@@ -200,28 +237,26 @@ mysqli_close($conn);
                         <thead>
                             <tr>
                                 <th>Rank</th>
-                                <th>Student Username</th>
+                                <th>Username</th>
                                 <th>Points</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php if (!empty($userLeaderboard)) { ?>
-                                <?php $rank = 1; ?>
-                                <?php foreach ($userLeaderboard as $user) { ?>
-                                    <?php if ($user['is_admin'] != 1 && $user['is_admin'] != 2) { ?>
+                            <div class="background-leaderboard">
+                                <?php if (!empty($userLeaderboard)): ?>
+                                    <?php foreach ($userLeaderboard as $rank => $user): ?>
                                         <tr>
-                                            <td><?= $rank; ?></td>
-                                            <td><?= htmlspecialchars($user['username']); ?></td>
-                                            <td><?= htmlspecialchars($user['total_points']); ?></td>
+                                            <td><?= $rank + 1 ?></td>
+                                            <td><?= htmlspecialchars($user['username']) ?></td>
+                                            <td><?= htmlspecialchars($user['total_points']) ?></td>
                                         </tr>
-                                        <?php $rank++; ?>
-                                    <?php } ?>
-                                <?php } ?>
-                            <?php } else { ?>
-                                <tr>
-                                    <td colspan="3">No leaderboard data available.</td>
-                                </tr>
-                            <?php } ?>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <tr>
+                                        <td colspan="3">No leaderboard data available.</td>
+                                    </tr>
+                                <?php endif; ?>
+                            </div>
                         </tbody>
                     </table>
                 </div>
@@ -229,78 +264,24 @@ mysqli_close($conn);
             <div class="profileContainer3">
                 <h1>Quiz History</h1>
                 <div class="background-quiz-history">
-                    <?php if (!empty($quizHistory)) { ?>
-                        <?php foreach ($quizHistory as $history) { ?>
+                    <?php if (!empty($quizHistory)): ?>
+                        <?php foreach ($quizHistory as $history): ?>
                             <form action="view_history_quiz.php" method="GET">
-                                <input type="hidden" name="quiz_id" value="<?= htmlspecialchars($history['quiz_id']); ?>">
+                                <input type="hidden" name="quiz_id" value="<?= htmlspecialchars($history['quiz_id']) ?>">
                                 <button type="submit" class="quiz-history-button quiz-history-buttons">
-                                    <strong><?= htmlspecialchars($history['quiz_name']); ?></strong> - Score: <?= htmlspecialchars($history['total_correct_answers']); ?>
+                                    <strong><?= htmlspecialchars($history['quiz_name']) ?></strong>
+                                    - Score: <?= htmlspecialchars($history['total_correct_answers']) ?>
                                 </button>
                             </form>
-                        <?php } ?>
-                    <?php } else { ?>
+                        <?php endforeach; ?>
+                    <?php else: ?>
                         <p>No quiz history found.</p>
-                    <?php } ?>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
     </div>
     <script src="functions.js"></script>
-    <script>
-        function submitResetRequest() {
-            const form = document.getElementById('resetForm');
-            const button = document.getElementById('resetButton');
-            const formData = new FormData(form);
-
-            // Disable the button to prevent multiple clicks
-            button.disabled = true;
-
-            fetch('', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => response.json())
-                .then(result => {
-                    alert(result.message);
-
-                    if (result.status === 'success') {
-                        window.location.href = "index.php";
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('An error occurred while processing your request.');
-                })
-                .finally(() => {
-                    // Re-enable the button
-                    button.disabled = false;
-                });
-        }
-
-        function submitDetailsChange() {
-            const form = document.getElementById('detailsForm');
-            const formData = new FormData(form);
-            formData.append('save_details_button', true);
-
-            fetch('', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(result => {
-                if (result.status === 'error') {
-                    alert(result.message);
-                } else if (result.status === 'success') {
-                    alert(result.message);
-                    location.reload();
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while processing your request.');
-            });
-        }
-    </script>
 </body>
 
 </html>

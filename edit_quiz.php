@@ -57,70 +57,63 @@ function fetchOptions($conn, $questionId)
 
 // Handle Quiz Update
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['save-details']) && isset($_POST['quiz_name']) && isset($_POST['description']) && isset($_POST['category'])) {
-        $quizName = htmlspecialchars($_POST['quiz_name'], ENT_QUOTES, 'UTF-8');
-        $quizDescription = htmlspecialchars($_POST['description'], ENT_QUOTES, 'UTF-8');
-        $category = htmlspecialchars($_POST['category'], ENT_QUOTES, 'UTF-8');
+    if (isset($_POST['quiz_name']) && isset($_POST['description']) && isset($_POST['category'])) {
+        $quizName = $_POST['quiz_name'];
+        $quizDescription = $_POST['description'];
+        $category = $_POST['category'];
 
-        // Start a transaction
-        $conn->begin_transaction();
+        // Validate if the quiz name already exists (excluding the current quiz)
+        $stmt = $conn->prepare("SELECT quiz_id FROM quiz WHERE quiz_name = ? AND quiz_id != ?");
+        $stmt->bind_param("si", $quizName, $quizId);
+        $stmt->execute();
+        $stmt->store_result();
 
-        try {
-            // Update quiz details
-            $stmt = $conn->prepare("UPDATE quiz SET quiz_name = ?, description = ?, category = ? WHERE quiz_id = ?");
-            if ($stmt) {
-                $stmt->bind_param("sssi", $quizName, $quizDescription, $category, $quizId);
-                if (!$stmt->execute()) {
-                    throw new Exception("Error updating quiz details: " . $stmt->error);
-                }
-                $stmt->close();
-            } else {
-                throw new Exception("Failed to prepare the UPDATE quiz statement: " . $conn->error);
-            }
-
-            // Update questions and options
-            foreach ($_POST['question_text'] as $index => $questionText) {
-                $questionId = intval($_POST['question_id'][$index]); // Sanitize question ID
-                $correctAnswer = htmlspecialchars($_POST['correct_answer'][$index], ENT_QUOTES, 'UTF-8');
-                $questionText = htmlspecialchars($questionText, ENT_QUOTES, 'UTF-8');
-
-                // Update question
-                $stmt = $conn->prepare("UPDATE question SET question_text = ?, correct_answer = ? WHERE question_id = ?");
-                if ($stmt) {
-                    $stmt->bind_param("ssi", $questionText, $correctAnswer, $questionId);
-                    if (!$stmt->execute()) {
-                        throw new Exception("Error updating question: " . $stmt->error);
-                    }
-                    $stmt->close();
-                }
-
-                // Update options
-                foreach ($_POST['option_text'][$index] as $optionIndex => $optionText) {
-                    $optionId = intval($_POST['option_id'][$index][$optionIndex]); // Sanitize option ID
-                    $optionText = htmlspecialchars($optionText, ENT_QUOTES, 'UTF-8');
-
-                    $stmt = $conn->prepare("UPDATE options SET option_text = ? WHERE option_id = ?");
-                    if ($stmt) {
-                        $stmt->bind_param("si", $optionText, $optionId);
-                        if (!$stmt->execute()) {
-                            throw new Exception("Error updating option: " . $stmt->error);
-                        }
-                        $stmt->close();
-                    }
-                }
-            }
-
-            // Commit the transaction
-            $conn->commit();
-            echo json_encode(['status' => 'success', 'message' => 'Quiz updated successfully.']);
-        } catch (Exception $e) {
-            // Rollback transaction if any query fails
-            $conn->rollback();
-            echo json_encode(['status' => 'error', 'message' => 'Error during quiz update: ' . $e->getMessage()]);
+        if ($stmt->num_rows > 0) {
+            $stmt->close();
+            echo "<script>
+                    alert('Quiz name already exists. Please choose a different name.');
+                    window.history.back();
+                  </script>";
+            exit;
         }
+
+        // Update quiz details
+        $stmt = $conn->prepare("UPDATE quiz SET quiz_name = ?, description = ?, category = ? WHERE quiz_id = ?");
+        $stmt->bind_param("sssi", $quizName, $quizDescription, $category, $quizId);
+        $stmt->execute();
+        $stmt->close();
+
+        // Update questions and options
+        foreach ($_POST['question_text'] as $index => $questionText) {
+            //retrieve question_id and correct_answer based on the current question that is being updated
+            $questionId = $_POST['question_id'][$index];
+            $correctAnswer = $_POST['correct_answer'][$index];
+
+            // Update question
+            $stmt = $conn->prepare("UPDATE question SET question_text = ?, correct_answer = ? WHERE question_id = ?");
+            $stmt->bind_param("ssi", $questionText, $correctAnswer, $questionId);
+            $stmt->execute();
+            $stmt->close();
+
+            // Update options
+            foreach ($_POST['option_text'][$index] as $optionIndex => $optionText) {
+                //retrieve option_id based on the current question that is being updated
+                $optionId = $_POST['option_id'][$index][$optionIndex];
+
+                $stmt = $conn->prepare("UPDATE options SET option_text = ? WHERE option_id = ?");
+                $stmt->bind_param("si", $optionText, $optionId);
+                $stmt->execute();
+                $stmt->close();
+            }
+        }
+
+        echo "<script>
+                alert('Quiz updated successfully.');
+                window.location.href = 'admin_quiz.php';
+              </script>";
         exit;
     } else {
-        echo json_encode(['status' => 'error', 'message' => 'Please fill in all required fields.']);
+        echo "<script>alert('Please fill in all required fields.');</script>";
     }
 }
 ?>
@@ -200,49 +193,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <div class="quiz-right-side-bottom">
                     <button type="button" class="action-quiz-button action-quiz-buttons" onclick="window.location.href='admin_quiz.php'">Back</button>
-                    <button type="button" onclick="submitUpdateId(<?php echo $quizId; ?>)" class="action-quiz-button action-quiz-buttons">Save</button>
+                    <button type="submit" name="submit_form" class="action-quiz-button action-quiz-buttons">Save</button>
                 </div>
             </form>
         </div>
-        <form id="quizForm" action="" method="POST" style="display: none;">
-            <input type="hidden" name="quiz_id" id="quiz_id">
-        </form>
     </div>
 </body>
-<script>
-    function submitUpdateId(quizId) {
-        const form = document.getElementById('quizForm');
-        const formData = new FormData(form);
-        formData.append('quiz_id', quizId);
-        formData.append('save-details', true);
-
-        const data = new URLSearchParams();
-        formData.forEach((value, key) => {
-            data.append(key, value);
-        });
-
-        fetch('', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: data.toString(),
-        })
-            .then(response => response.json())
-            .then(result => {
-                if (result.status === 'error') {
-                    alert(result.message);
-                } else if (result.status === 'success') {
-                    alert(result.message);
-                    window.location.href = "admin_quiz.php";
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while processing your request.');
-            });
-    }
-</script>
 
 </html>
 

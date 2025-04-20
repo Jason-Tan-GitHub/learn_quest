@@ -71,8 +71,6 @@ function fetchOptions($conn, $questionId)
     $stmt->close();
     return $options;
 }
-
-mysqli_close($conn);
 ?>
 
 <!DOCTYPE html>

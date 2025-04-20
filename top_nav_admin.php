@@ -27,7 +27,7 @@ switch ($current_page) {
         $page_title = 'Manage Quizzes';
         break;
     case 'admin_page.php':
-        $page_title = 'Manage Admins';
+        $page_title = 'Manage Teachers';
         break;
 }
 
@@ -44,7 +44,7 @@ switch ($current_page) {
                 <span>User Home Page</span>
             </a>
             <a href="admin_page.php" class="b2 solid" style="<?php echo $show_admin_options ? 'display:block;' : 'display:none;'; ?>">
-                <span>Manage Admins</span>
+                <span>Manage Teachers</span>
             </a>
             <a href="admin_quiz.php" class="b2 solid" style="<?php echo $show_admin_options ? 'display:block;' : 'display:none;'; ?>">
                 <span>Manage Quizzes</span>
@@ -69,7 +69,7 @@ switch ($current_page) {
                         <li>
                             <a href="admin_page.php" style="<?php echo $show_admin_options ? 'display:block;' : 'display:none;'; ?>">
                                 <i class="bx bx-user-circle bx-md"></i>
-                                <span class="nav-item">Manage Admins</span>
+                                <span class="nav-item">Manage Teachers</span>
                             </a>
                         </li>
                         <li>
